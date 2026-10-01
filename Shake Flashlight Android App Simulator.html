@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lanterna por Chaco,o Android App</title>
+    <!-- Tailwind CSS for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .phone-frame {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            border: 12px solid #1e293b;
+        }
+        .flashlight-on {
+            box-shadow: 0 0 60px 20px rgba(234, 179, 8, 0.4), inset 0 0 40px rgba(255, 255, 255, 0.8);
+            background: radial-gradient(circle, #fef08a 0%, #eab308 60%, #ca8a04 100%);
+        }
+        .flashlight-off {
+            background: radial-gradient(circle, #334155 0%, #1e293b 60%, #0f172a 100%);
+        }
+        @keyframes shake {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            20% { transform: translate(-10px, 5px) rotate(-3deg); }
+            40% { transform: translate(10px, -5px) rotate(3deg); }
+            60% { transform: translate(-8px, 3px) rotate(-2deg); }
+            80% { transform: translate(8px, -3px) rotate(2deg); }
+            100% { transform: translate(0, 0) rotate(0deg); }
+        }
+        .shaking {
+            animation: shake 0.3s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <header class="text-center mb-6">
+        <h1 class="text-2xl font-bold tracking-tight text-amber-400 flex items-center justify-center gap-2">
+            <i class="fa-solid fa-bolt"></i> ShakeFlash Android
+        </h1>
+        <p class="text-xs text-slate-400 mt-1">Chacoalhe o celular 3 vezes para acender ou apagar a lanterna</p>
+    </header>
+
+    <main class="w-full max-w-sm">
+        <div id="phoneScreen" class="phone-frame relative w-full aspect-[9/18] rounded-[40px] overflow-hidden flex flex-col justify-between p-6 transition-all duration-500 flashlight-off">
+            
+            <!-- Android Status Bar -->
+            <div class="flex justify-between items-center text-xs text-slate-300 font-medium px-2">
+                <span id="currentTime">12:00</span>
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-signal text-[10px]"></i>
+                    <i class="fa-solid fa-wifi text-[10px]"></i>
+                    <i class="fa-solid fa-battery-three-quarters text-emerald-400"></i>
+                </div>
+            </div>
+
+            <!-- Main Flashlight Center UI -->
+            <div class="flex flex-col items-center justify-center text-center my-auto z-10">
+                <button id="toggleBtn" class="w-32 h-32 rounded-full flex items-center justify-center shadow-2xl transition-transform active:scale-95 cursor-pointer bg-slate-800/80 border-4 border-slate-600 backdrop-blur-md group">
+                    <i id="powerIcon" class="fa-solid fa-power-off text-4xl text-slate-400 group-hover:text-amber-400 transition-colors"></i>
+                </button>
+                <h2 id="statusText" class="text-lg font-semibold mt-6 tracking-wide text-slate-200">Lanterna Desligada</h2>
+                
+                <!-- Shake Counter Indicator -->
+                <div class="mt-4 bg-slate-900/60 backdrop-blur-md px-4 py-2 rounded-full border border-slate-700/50 flex items-center gap-3">
+                    <span class="text-xs text-slate-400">Contador de Chacos:</span>
+                    <div class="flex gap-1" id="shakeDots">
+                        <span class="w-3 h-3 rounded-full bg-slate-700 transition-colors" data-index="0"></span>
+                        <span class="w-3 h-3 rounded-full bg-slate-700 transition-colors" data-index="1"></span>
+                        <span class="w-3 h-3 rounded-full bg-slate-700 transition-colors" data-index="2"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Control Panel / Simulation Tools -->
+            <div class="flex flex-col gap-3 bg-slate-900/80 backdrop-blur-md p-4 rounded-2xl border border-slate-800">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-medium text-slate-300">Sensibilidade do Sensor</span>
+                    <span id="sensVal" class="text-xs font-bold text-amber-400">15 m/s²</span>
+                </div>
+                <input type="range" id="sensRange" min="10" max="25" value="15" class="w-full accent-amber-500 cursor-pointer">
+                
+                <div class="grid grid-cols-2 gap-2 mt-1">
+                    <button id="simulateShakeBtn" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold py-2.5 px-3 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95">
+                        <i class="fa-solid fa-mobile-screen-button"></i> Simular Chaco
+                    </button>
+                    <button id="nativeSensorBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium py-2.5 px-3 rounded-xl text-xs transition-colors border border-slate-700 flex items-center justify-center gap-2 active:scale-95">
+                        <i class="fa-solid fa-compass"></i> Ativar Dispositivo
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <footer class="mt-6 max-w-sm text-center text-xs text-slate-400 leading-relaxed">
+        <p class="font-medium text-slate-300 mb-1">Como implementar em Kotlin (Android Studio):</p>
+        <p class="text-[11px] text-slate-400">Utilize <code class="bg-slate-800 px-1 py-0.5 rounded text-amber-300">SensorManager</code> com <code class="bg-slate-800 px-1 py-0.5 rounded text-amber-300">Sensor.TYPE_ACCELEROMETER</code> monitorando delta de aceleração em intervalos < 500ms para disparar a API <code class="bg-slate-800 px-1 py-0.5 rounded text-amber-300">CameraManager</code>.</p>
+    </footer>
+
+    <script>
+        // Update live clock
+        function updateClock() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            document.getElementById('currentTime').textContent = `${hours}:${minutes}`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Flashlight state
+        let isOn = false;
+        let shakeCount = 0;
+        let shakeTimer = null;
+        let sensorActive = false;
+
+        const phoneScreen = document.getElementById('phoneScreen');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const powerIcon = document.getElementById('powerIcon');
+        const statusText = document.getElementById('statusText');
+        const simulateShakeBtn = document.getElementById('simulateShakeBtn');
+        const nativeSensorBtn = document.getElementById('nativeSensorBtn');
+        const sensRange = document.getElementById('sensRange');
+        const sensVal = document.getElementById('sensVal');
+        const shakeDots = document.querySelectorAll('#shakeDots span');
+
+        sensRange.addEventListener('input', (e) => {
+            sensVal.textContent = `${e.target.value} m/s²`;
+        });
+
+        function toggleFlashlight() {
+            isOn = !isOn;
+            if (isOn) {
+                phoneScreen.classList.remove('flashlight-off');
+                phoneScreen.classList.add('flashlight-on');
+                powerIcon.classList.remove('text-slate-400');
+                powerIcon.classList.add('text-slate-950');
+                toggleBtn.classList.remove('bg-slate-800/80', 'border-slate-600');
+                toggleBtn.classList.add('bg-amber-400', 'border-amber-200');
+                statusText.textContent = 'Lanterna Ligada';
+                statusText.classList.add('text-slate-950', 'font-bold');
+                statusText.classList.remove('text-slate-200');
+            } else {
+                phoneScreen.classList.remove('flashlight-on');
+                phoneScreen.classList.add('flashlight-off');
+                powerIcon.classList.add('text-slate-400');
+                powerIcon.classList.remove('text-slate-950');
+                toggleBtn.classList.add('bg-slate-800/80', 'border-slate-600');
+                toggleBtn.classList.remove('bg-amber-400', 'border-amber-200');
+                statusText.textContent = 'Lanterna Desligada';
+                statusText.classList.remove('text-slate-950', 'font-bold');
+                statusText.classList.add('text-slate-200');
+            }
+        }
+
+        toggleBtn.addEventListener('click', toggleFlashlight);
+
+        function registerShake() {
+            shakeCount++;
+            updateDots();
+            
+            // Visual shake feedback on phone frame
+            phoneScreen.classList.add('shaking');
+            setTimeout(() => {
+                phoneScreen.classList.remove('shaking');
+            }, 300);
+
+            if (shakeCount >= 3) {
+                toggleFlashlight();
+                resetShakes();
+                return;
+            }
+
+            clearTimeout(shakeTimer);
+            shakeTimer = setTimeout(() => {
+                resetShakes();
+            }, 1000); // 1 second window for 3 shakes
+        }
+
+        function resetShakes() {
+            shakeCount = 0;
+            updateDots();
+        }
+
+        function updateDots() {
+            shakeDots.forEach((dot, index) => {
+                if (index < shakeCount) {
+                    dot.classList.remove('bg-slate-700');
+                    dot.classList.add('bg-amber-400', 'scale-125');
+                } else {
+                    dot.classList.add('bg-slate-700');
+                    dot.classList.remove('bg-amber-400', 'scale-125');
+                }
+            });
+        }
+
+        simulateShakeBtn.addEventListener('click', () => {
+            registerShake();
+        });
+
+        // Device Motion API integration for physical phones
+        nativeSensorBtn.addEventListener('click', async () => {
+            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                try {
+                    const response = await DeviceMotionEvent.requestPermission();
+                    if (response === 'granted') {
+                        activateMotionListener();
+                    } else {
+                        alert('Permissão do sensor negada.');
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            } else if (window.DeviceMotionEvent) {
+                activateMotionListener();
+            } else {
+                alert('Acelerômetro não suportado neste dispositivo/navegador.');
+            }
+        });
+
+        function activateMotionListener() {
+            if (sensorActive) return;
+            sensorActive = true;
+            nativeSensorBtn.textContent = 'Sensor Ativo ✓';
+            nativeSensorBtn.classList.remove('bg-slate-800', 'border-slate-700');
+            nativeSensorBtn.classList.add('bg-emerald-600', 'border-emerald-500');
+
+            let lastX = 0, lastY = 0, lastZ = 0;
+            let lastUpdate = 0;
+
+            window.addEventListener('devicemotion', (e) => {
+                const currentThreshold = parseFloat(sensRange.value);
+                const acceleration = e.accelerationIncludingGravity;
+                if (!acceleration) return;
+
+                const curTime = Date.now();
+                if ((curTime - lastUpdate) > 100) {
+                    const diffTime = curTime - lastUpdate;
+                    lastUpdate = curTime;
+
+                    const speed = Math.abs(acceleration.x + acceleration.y + acceleration.z - lastX - lastY - lastZ) / diffTime * 10000;
+
+                    if (speed > currentThreshold * 150) {
+                        registerShake();
+                    }
+
+                    lastX = acceleration.x;
+                    lastY = acceleration.y;
+                    lastZ = acceleration.z;
+                }
+            });
+        }
+    </script>
+</body>
+</html>

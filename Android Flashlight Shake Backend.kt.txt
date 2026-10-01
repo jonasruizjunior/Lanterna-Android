@@ -1,0 +1,289 @@
+// ============================================================================
+// ANDROID FLASHLIGHT SHAKE BACKEND - KOTLIN SOURCE CODE
+// Project structure for Android Studio
+// ============================================================================
+
+/*
+ * ----------------------------------------------------------------------------
+ * 1. AndroidManifest.xml permissions and service declarations
+ * ----------------------------------------------------------------------------
+ * Add these entries inside your <manifest> tag in app/src/main/AndroidManifest.xml:
+ *
+ * <uses-permission android:name="android.permission.CAMERA" />
+ * <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+ * <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+ * <uses-feature android:name="hardware.camera.flash" android:required="true" />
+ *
+ * Inside <application>:
+ * <service
+ *     android:name=".services.FlashlightShakeService"
+ *     android:enabled="true"
+ *     android:exported="false"
+ *     android:foregroundServiceType="specialUse" />
+ */
+
+package com.example.shakeflashlight.services
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.hardware.camera2.CameraManager
+import android.os.Build
+import android.os.IBinder
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import androidx.core.app.NotificationCompat
+import com.example.shakeflashlight.R
+import kotlin.math.abs
+
+/**
+ * Foreground Service responsible for listening to accelerometer sensor events
+ * in the background, detecting the 3-shake pattern, and toggling the camera flashlight.
+ */
+class FlashlightShakeService : Service(), SensorEventListener {
+
+    // Sensor Management
+    private lateinit var sensorManager: SensorManager
+    private var accelerometer: Sensor? = null
+
+    // Camera Management
+    private lateinit var cameraManager: CameraManager
+    private var cameraId: String? = null
+    private var isFlashOn = false
+
+    // Shake Detection Variables
+    private var shakeCount = 0
+    private var lastShakeTimestamp: Long = 0
+    private val shakeTimeoutWindowMs: Long = 1000 // 1 second window to complete 3 shakes
+    private val shakeThreshold = 14.0f             // Acceleration sensitivity threshold (m/s²)
+    private var lastX = 0f
+    private var lastY = 0f
+    private var lastZ = 0f
+    private var lastUpdateTime: Long = 0
+
+    companion object {
+        const val CHANNEL_ID = "FlashlightShakeServiceChannel"
+        const val NOTIFICATION_ID = 101
+        const val ACTION_TOGGLE = "com.example.shakeflashlight.ACTION_TOGGLE"
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        
+        // Initialize Sensor Manager
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+
+        // Initialize Camera Manager for Flashlight control
+        cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        try {
+            cameraId = cameraManager.cameraIdList.firstOrNull { id ->
+                cameraManager.getCameraCharacteristics(id)
+                    .get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        startForegroundServiceNotification()
+        registerSensorListener()
+    }
+
+    private fun startForegroundServiceNotification() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Shake Flashlight Service Channel",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Mantém o serviço de chacoalhar ativo em segundo plano"
+            }
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+
+        val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Lanterna por Chaco")
+            .setContentText("Agite o celular 3 vezes para ligar/desligar")
+            .setSmallIcon(R.drawable.ic_bolt_foreground) // Certifique-se de ter um ícone válido nos recursos
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+
+        startForeground(NOTIFICATION_ID, notification)
+    }
+
+    private fun registerSensorListener() {
+        accelerometer?.let { sensor ->
+            sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
+        }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_TOGGLE) {
+            toggleFlashlight()
+        }
+        return START_STICKY
+    }
+
+    override fun onBind(intent: Intent?): IBinder? {
+        return null
+    }
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
+            val currentTime = System.currentTimeMillis()
+
+            // Limit processing frequency (~100ms intervals for stability)
+            if ((currentTime - lastUpdateTime) > 100) {
+                val diffTime = currentTime - lastUpdateTime
+                lastUpdateTime = currentTime
+
+                val x = event.values[0]
+                val y = event.values[1]
+                val z = event.values[2]
+
+                // Calculate speed/delta acceleration change
+                val speed = abs(x + y + z - lastX - lastY - lastZ) / diffTime * 10000
+
+                if (speed > shakeThreshold * 100) {
+                    val now = System.currentTimeMillis()
+
+                    // Reset count if timeout window expired
+                    if (now - lastShakeTimestamp > shakeTimeoutWindowMs) {
+                        shakeCount = 0
+                    }
+
+                    shakeCount++
+                    lastShakeTimestamp = now
+
+                    // Trigger flashlight when 3 shakes are detected
+                    if (shakeCount >= 3) {
+                        toggleFlashlight()
+                        shakeCount = 0
+                    }
+                }
+
+                lastX = x
+                lastY = y
+                lastZ = z
+            }
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        // Not used, required by SensorEventListener interface
+    }
+
+    private fun toggleFlashlight() {
+        cameraId?.let { id ->
+            try {
+                isFlashOn = !isFlashOn
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    cameraManager.setTorchMode(id, isFlashOn)
+                }
+                
+                // Provide haptic feedback confirmation on successful toggle
+                triggerHapticFeedback()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun triggerHapticFeedback() {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(150, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(150)
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Unregister sensor listener to prevent memory leaks
+        sensorManager.unregisterListener(this)
+        
+        // Turn off flashlight when service stops for safety
+        cameraId?.let { id ->
+            try {
+                if (isFlashOn && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    cameraManager.setTorchMode(id, false)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+}
+
+/*
+ * ----------------------------------------------------------------------------
+ * 2. MainActivity.kt Integration Example
+ * ----------------------------------------------------------------------------
+ * Place this code in your MainActivity to start the background service from UI:
+ *
+ * package com.example.shakeflashlight
+ *
+ * import android.Manifest
+ * import android.content.Intent
+ * import android.content.pm.PackageManager
+ * import android.os.Build
+ * import android.os.Bundle
+ * import android.widget.Button
+ * import androidx.appcompat.app.AppCompatActivity
+ * import androidx.core.app.ActivityCompat
+ * import androidx.core.content.ContextCompat
+ * import com.example.shakeflashlight.services.FlashlightShakeService
+ *
+ * class MainActivity : AppCompatActivity() {
+ *
+ *     companion object {
+ *         private const val CAMERA_PERMISSION_CODE = 200
+ *     }
+ *
+ *     override fun onCreate(savedInstanceState: Bundle?) {
+ *         super.onCreate(savedInstanceState)
+ *         setContentView(R.layout.activity_main)
+ *
+ *         checkAndRequestPermissions()
+ *
+ *         val btnStartService = findViewById<Button>(R.id.btnStartService)
+ *         btnStartService.setOnClickListener {
+ *             val serviceIntent = Intent(this, FlashlightShakeService::class.java)
+ *             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+ *                 startForegroundService(serviceIntent)
+ *             } else {
+ *                 startService(serviceIntent)
+ *             }
+ *         }
+ *     }
+ *
+ *     private fun checkAndRequestPermissions() {
+ *         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+ *             != PackageManager.PERMISSION_GRANTED) {
+ *             ActivityCompat.requestPermissions(
+ *                 this,
+ *                 arrayOf(Manifest.permission.CAMERA),
+ *                 CAMERA_PERMISSION_CODE
+ *             )
+ *         }
+ *     }
+ * }
+ */
