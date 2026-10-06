@@ -1,0 +1,20 @@
+{
+  "background_color": "#121212",
+  "description": "Aplicativo de lanterna ativada por chacoalhada",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "Lanterna Shake",
+  "orientation": "portrait",
+  "scope": "/",
+  "short_name": "Lanterna",
+  "start_url": "/",
+  "theme_color": "#121212",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/color/512/flashlight.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
