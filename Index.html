@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lanterna Shake</title>
+    
+    <!-- Manifesto Incorporado para o PWABuilder detetar imediatamente -->
+    <link rel="manifest" href="data:application/manifest+json,{
+      %22background_color%22: %22%23121212%22,
+      %22description%22: %22Lanterna ativada por chacoalhar%22,
+      %22dir%22: %22ltr%22,
+      %22display%22: %22standalone%22,
+      %22name%22: %22Lanterna Shake%22,
+      %22orientation%22: %22portrait%22,
+      %22scope%22: %22/%22,
+      %22short_name%22: %22Lanterna%22,
+      %22start_url%22: %22/%22,
+      %22theme_color%22: %22%23121212%22,
+      %22icons%22: [{
+        %22src%22: %22https://img.icons8.com/color/512/flashlight.png%22,
+        %22sizes%22: %22512x512%22,
+        %22type%22: %22image/png%22
+      }]
+    }">
+    
+    <meta name="theme-color" content="#121212">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: #121212; color: #ffffff; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100vh; height: 100dvh; padding: 30px 20px; text-align: center; overflow: hidden; }
+        header h1 { font-size: 1.5rem; margin-bottom: 5px; color: #ffb703; }
+        header p { font-size: 0.9rem; color: #aaa; }
+        .main-container { display: flex; flex-direction: column; align-items: center; justify-content: center; flex-grow: 1; width: 100%; }
+        .flashlight-btn { width: 160px; height: 160px; border-radius: 50%; border: none; background: #2b2b2b; color: #777; font-size: 1.2rem; font-weight: bold; cursor: pointer; box-shadow: 0 10px 25px rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; transition: 0.3s; }
+        .flashlight-btn.on { background: #ffb703; color: #121212; box-shadow: 0 0 40px rgba(255,183,3,0.6); }
+        .flashlight-btn svg { width: 48px; height: 48px; fill: currentColor; }
+        .status-box { margin-top: 30px; background: #1e1e1e; padding: 12px 20px; border-radius: 12px; width: 100%; max-width: 320px; border: 1px solid #333; }
+        .status-box p { font-size: 0.95rem; color: #ddd; }
+        .status-box span { font-weight: bold; color: #ffb703; }
+        .permission-btn { background: #023047; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; margin-bottom: 15px; cursor: pointer; }
+        .footer-info { font-size: 0.8rem; color: #666; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Lanterna Shake</h1>
+        <p>Agite 3 vezes para ligar/desligar</p>
+    </header>
+    <div class="main-container">
+        <button id="permBtn" class="permission-btn" style="display:none;">Ativar Sensor</button>
+        <button id="flashBtn" class="flashlight-btn">
+            <svg viewBox="0 0 24 24"><path d="M9 2h6v2H9V2m9 4v2H6V6h12m-1 4v11a1 1 0 0 1-1 8H8a1 1 0 0 1-1-1V10h10M11 12v7h2v-7h-2z"/></svg>
+            <span id="btnText">DESLIGADO</span>
+        </button>
+        <div class="status-box">
+            <p>Estado: <span id="sensorStatus">Aguardando...</span></p>
+            <p>Contador: <span id="shakeCount">0</span> / 3</p>
+        </div>
+    </div>
+    <div class="footer-info">Instale este site como app para usar a funcionalidade completa.</div>
+    <script>
+        let track = null, isOn = false, shakeCount = 0, lastTime = 0, lastX = 0, lastY = 0, lastZ = 0;
+        const THRESHOLD = 22;
+        const flashBtn = document.getElementById('flashBtn'), btnText = document.getElementById('btnText');
+        const sensorStatus = document.getElementById('sensorStatus'), shakeCountSpan = document.getElementById('shakeCount'), permBtn = document.getElementById('permBtn');
+
+        async function toggleFlashlight() {
+            try {
+                if (!track) {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                    track = stream.getVideoTracks()[0];
+                }
+                isOn = !isOn;
+                await track.applyConstraints({ advanced: [{ torch: isOn }] });
+                flashBtn.classList.toggle('on', isOn);
+                btnText.textContent = isOn ? 'LIGADO' : 'DESLIGADO';
+            } catch (err) { console.error(err); alert('Erro ao aceder à lanterna.'); }
+        }
+        flashBtn.addEventListener('click', toggleFlashlight);
+
+        function handleMotion(e) {
+            const acc = e.accelerationIncludingGravity;
+            if (!acc) return;
+            const currentTime = new Date().getTime();
+            if ((currentTime - lastTime) > 100) {
+                const diffTime = currentTime - lastTime;
+                lastTime = currentTime;
+                const speed = Math.abs(acc.x + acc.y + acc.z - lastX - lastY - lastZ) / diffTime * 10000;
+                if (speed > THRESHOLD) {
+                    shakeCount++;
+                    shakeCountSpan.textContent = shakeCount;
+                    if (shakeCount >= 3) { toggleFlashlight(); shakeCount = 0; shakeCountSpan.textContent = shakeCount; }
+                    setTimeout(() => { if (shakeCount > 0 && shakeCount < 3) { shakeCount = 0; shakeCountSpan.textContent = shakeCount; } }, 1000);
+                }
+                lastX = acc.x; lastY = acc.y; lastZ = acc.z;
+            }
+        }
+
+        function initSensors() {
+            if (typeof DeviceMotionEvent !== 'undefined') {
+                if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                    permBtn.style.display = 'block';
+                    permBtn.onclick = () => {
+                        DeviceMotionEvent.requestPermission().then(res => {
+                            if (res === 'granted') { window.addEventListener('devicemotion', handleMotion); sensorStatus.textContent = 'Ativo!'; permBtn.style.display = 'none'; }
+                        });
+                    };
+                } else { window.addEventListener('devicemotion', handleMotion); sensorStatus.textContent = 'Ativo!'; }
+            } else { sensorStatus.textContent = 'Não suportado'; }
+        }
+        initSensors();
+    </script>
+</body>
+</html>
